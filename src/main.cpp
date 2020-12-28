@@ -1,61 +1,127 @@
-// color swirl! connect an RGB LED to the PWM pins as indicated
-// in the #defines
-// public domain, enjoy!
+/**
+ * Shelfstrip
+ *
+ * Mega controller of three RGBW strips
+ * Using a Node CU as pass through WiFi
+ * MQTT status and control of the strip program to be run
+ * Not referenced here: ISY controller sends MQTT messages
+ * ELClient runs on the Node CU
+ */
 
 #include <Arduino.h>
+#include "ELClient.h"
+#include "ELClientCmd.h"
+#include "ELClientMqtt.h"
 
-#define REDPIN 4
-#define GREENPIN 5
-#define BLUEPIN 3
-#define WHITEPIN 2
+// Initialize a connection to esp-link using the normal hardware serial port both for
+// SLIP and for debug messages.
+ELClient esp(&Serial, &Serial);
 
-#define FADESPEED 5     // make this higher to slow down
+// Initialize CMD client (for GetTime)
+ELClientCmd cmd(&esp);
+
+// Initialize the MQTT client
+ELClientMqtt mqtt(&esp);
+
+// Callback made from esp-link to notify of wifi status changes
+// Here we just print something out for grins
+void wifiCb(void* response) {
+  ELClientResponse *res = (ELClientResponse*)response;
+  if (res->argc() == 1) {
+    uint8_t status;
+    res->popArg(&status, 1);
+
+    if(status == STATION_GOT_IP) {
+      Serial.println("WIFI CONNECTED");
+    } else {
+      Serial.print("WIFI NOT READY: ");
+      Serial.println(status);
+    }
+  }
+}
+
+bool connected;
+
+// Callback when MQTT is connected
+void mqttConnected(void* response) {
+  Serial.println("MQTT connected!");
+  mqtt.subscribe("/esp-link/1");
+  mqtt.subscribe("/hello/world/#");
+  //mqtt.subscribe("/esp-link/2", 1);
+  //mqtt.publish("/esp-link/0", "test1");
+  connected = true;
+}
+
+// Callback when MQTT is disconnected
+void mqttDisconnected(void* response) {
+  Serial.println("MQTT disconnected");
+  connected = false;
+}
+
+// Callback when an MQTT message arrives for one of our subscriptions
+void mqttData(void* response) {
+  ELClientResponse *res = (ELClientResponse *)response;
+
+  Serial.print("Received: topic=");
+  String topic = res->popString();
+  Serial.println(topic);
+
+  Serial.print("data=");
+  String data = res->popString();
+  Serial.println(data);
+}
+
+void mqttPublished(void* response) {
+  Serial.println("MQTT published");
+}
 
 void setup() {
-  pinMode(REDPIN, OUTPUT);
-  pinMode(GREENPIN, OUTPUT);
-  pinMode(BLUEPIN, OUTPUT);
-  pinMode(WHITEPIN, OUTPUT);
-  }
+  Serial.begin(115200);
+  Serial.println("EL-Client starting!");
 
+  // Sync-up with esp-link, this is required at the start of any sketch and initializes the
+  // callbacks to the wifi status change callback. The callback gets called with the initial
+  // status right after Sync() below completes.
+  esp.wifiCb.attach(wifiCb); // wifi status change callback, optional (delete if not desired)
+  bool ok;
+  do {
+    ok = esp.Sync();      // sync up with esp-link, blocks for up to 2 seconds
+    if (!ok) Serial.println("EL-Client sync failed!");
+  } while(!ok);
+  Serial.println("EL-Client synced!");
+
+  // Set-up callbacks for events and initialize with es-link.
+  mqtt.connectedCb.attach(mqttConnected);
+  mqtt.disconnectedCb.attach(mqttDisconnected);
+  mqtt.publishedCb.attach(mqttPublished);
+  mqtt.dataCb.attach(mqttData);
+  mqtt.setup();
+
+  //Serial.println("ARDUINO: setup mqtt lwt");
+  //mqtt.lwt("/lwt", "offline", 0, 0); //or mqtt.lwt("/lwt", "offline");
+
+  Serial.println("EL-MQTT ready");
+}
+
+static int count;
+static uint32_t last;
 
 void loop() {
-    int r, g, b, w;
+  esp.Process();
 
-  // fade from black to white
-  for (w = 0; w < 256 ; w++) {
-    analogWrite(WHITEPIN, w);
-    delay(FADESPEED);
-  }
+  if (connected && (millis()-last) > 4000) {
+    Serial.println("publishing");
+    char buf[12];
 
-  // fade from blue to violet
-  for (r = 0; r < 256; r++) {
-    analogWrite(REDPIN, r);
-    delay(FADESPEED);
-  }
-  // fade from violet to red
-  for (b = 255; b > 0; b--) {
-    analogWrite(BLUEPIN, b);
-    delay(FADESPEED);
-  }
-  // fade from red to yellow
-  for (g = 0; g < 256; g++) {
-    analogWrite(GREENPIN, g);
-    delay(FADESPEED);
-  }
-  // fade from yellow to green
-  for (r = 255; r > 0; r--) {
-    analogWrite(REDPIN, r);
-    delay(FADESPEED);
-  }
-  // fade from green to teal
-  for (b = 0; b < 256; b++) {
-    analogWrite(BLUEPIN, b);
-    delay(FADESPEED);
-  }
-  // fade from teal to blue
-  for (g = 255; g > 0; g--) {
-    analogWrite(GREENPIN, g);
-    delay(FADESPEED);
+    itoa(count++, buf, 10);
+    mqtt.publish("/esp-link/1", buf);
+
+    itoa(count+99, buf, 10);
+    mqtt.publish("/hello/world/arduino", buf);
+
+    uint32_t t = cmd.GetTime();
+    Serial.print("Time: "); Serial.println(t);
+
+    last = millis();
   }
 }
