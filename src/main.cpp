@@ -8,10 +8,12 @@
  * ELClient runs on the Node CU
  */
 
+#include <stdlib.h>
+#define UBRR0H
 #include <Arduino.h>
-#include "ELClient.h"
-#include "ELClientCmd.h"
-#include "ELClientMqtt.h"
+#include <ELClient.h>
+#include <ELClientCmd.h>
+#include <ELClientMqtt.h>
 
 // Initialize a connection to esp-link using the normal hardware serial port both for
 // SLIP and for debug messages.
@@ -105,6 +107,7 @@ void setup() {
 
 static int count;
 static uint32_t last;
+extern char * itoa (int val, char *s, int radix);
 
 void loop() {
   esp.Process();
