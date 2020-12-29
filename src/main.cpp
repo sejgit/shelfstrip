@@ -9,7 +9,6 @@
  */
 
 #include <stdlib.h>
-#define UBRR0H
 #include <Arduino.h>
 #include <ELClient.h>
 #include <ELClientCmd.h>
@@ -107,7 +106,6 @@ void setup() {
 
 static int count;
 static uint32_t last;
-extern char * itoa (int val, char *s, int radix);
 
 void loop() {
   esp.Process();
