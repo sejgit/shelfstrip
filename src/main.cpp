@@ -1,19 +1,97 @@
-/**
- * Shelfstrip
- *
- * Mega controller of three RGBW strips
- * Using a Node CU as pass through WiFi
- * MQTT status and control of the strip program to be run
- * Not referenced here: ISY controller sends MQTT messages
- * ELClient runs on the Node CU
+/*
+  Shelfstrip
+
+  Mega controller of three RGBW strips
+  Using a Node CU as pass through WiFi
+  MQTT status and control of the strip program to be run
+  Not referenced here: ISY controller sends MQTT messages
+  ELClient runs on the Node CU
  */
 
+
+/*
+  Includes
+*/
 #include <stdlib.h>
 #include <Arduino.h>
 #include <ELClient.h>
 #include <ELClientCmd.h>
 #include <ELClientMqtt.h>
+#include <avr/wdt.h>
 
+
+/*
+  Pin definition
+*/
+#define S1_WHITEPIN 2
+#define S1_BLUEPIN 3
+#define S1_REDPIN 4
+#define S1_GREENPIN 5
+
+#define S2_WHITEPIN 6
+#define S2_BLUEPIN 7
+#define S2_REDPIN 8
+#define S2_GREENPIN 9
+
+#define S3_WHITEPIN 10
+#define S3_BLUEPIN 11
+#define S3_REDPIN 12
+#define S3_GREENPIN 13
+
+#define FADESPEED 5     // make this higher to slow down
+
+void pinsetup() {
+  pinMode(S1_REDPIN, OUTPUT);
+  pinMode(S1_GREENPIN, OUTPUT);
+  pinMode(S1_BLUEPIN, OUTPUT);
+  pinMode(S1_WHITEPIN, OUTPUT);
+
+  pinMode(S2_REDPIN, OUTPUT);
+  pinMode(S2_GREENPIN, OUTPUT);
+  pinMode(S2_BLUEPIN, OUTPUT);
+  pinMode(S2_WHITEPIN, OUTPUT);
+
+  pinMode(S3_REDPIN, OUTPUT);
+  pinMode(S3_GREENPIN, OUTPUT);
+  pinMode(S3_BLUEPIN, OUTPUT);
+  pinMode(S3_WHITEPIN, OUTPUT);
+}
+
+
+/*
+  MQTT
+*/
+#define toptopic "sej" // main topic
+#define clientId "shelfstrip" // client ID for this unit
+#define concat(first, second, third) first second third //macro for concatenation
+#define topic_clientId concat(toptopic, "/", clientId)
+
+const char* topic_control_reset= concat(topic_clientId , "/control", "/reset"); // reset position
+const char* message_control_reset[] = {"--", "RESET", "Resetting"};
+
+const char* topic_control_program= concat(topic_clientId, "/control", "/program"); // run program
+const char* message_control_program[] = {"OFF", "WHITE", "ACCENT"};
+
+const char* topic_control_accent= concat(topic_clientId, "/control", "/accent"); // accent #
+const char* topic_control_bright= concat(topic_clientId, "/control", "/bright"); // bright
+
+const char* topic_status= concat(topic_clientId, "/status", "/status"); // program status
+const char* message_status[] = {"OK", "NOK", "CHANGING"};
+
+
+/*
+  Global vars
+*/
+int program = 0; // start with off
+int accent = 0; // start with no accent
+int bright = 255; // start with full 100% bright
+char buf[25]; // spare char buffer
+boolean change = false;
+
+
+/*
+  Initialize ELClient & MQTT
+*/
 // Initialize a connection to esp-link using the normal hardware serial port both for
 // SLIP and for debug messages.
 ELClient esp(&Serial, &Serial);
@@ -46,10 +124,16 @@ bool connected;
 // Callback when MQTT is connected
 void mqttConnected(void* response) {
   Serial.println("MQTT connected!");
-  mqtt.subscribe("/esp-link/1");
-  mqtt.subscribe("/hello/world/#");
-  //mqtt.subscribe("/esp-link/2", 1);
-  //mqtt.publish("/esp-link/0", "test1");
+  mqtt.publish(toptopic, concat("connected ", clientId, ".") , true );
+  mqtt.publish(topic_status, message_status[0] , true );
+  mqtt.subscribe(topic_control_reset);
+  mqtt.publish(topic_control_reset, message_control_reset[0] , true );
+  mqtt.subscribe(topic_control_program);
+  mqtt.publish(topic_control_program, message_control_program[program] , true );
+  mqtt.subscribe(topic_control_accent);
+  mqtt.publish(topic_control_accent, itoa(accent, buf, 10) , true );
+  mqtt.subscribe(topic_control_bright);
+  mqtt.publish(topic_control_bright, itoa(bright, buf, 10) , true );
   connected = true;
 }
 
@@ -58,6 +142,20 @@ void mqttDisconnected(void* response) {
   Serial.println("MQTT disconnected");
   connected = false;
 }
+
+/*
+  Handle reset through MQTT or wifi fail
+ */
+void resetDevice(void)
+{
+    Serial.println("Rebooting...");
+    mqtt.publish(topic_control_reset, message_control_reset[2], true);
+    wdt_enable( WDTO_4S);
+    delay(2000);
+    mqtt.publish(topic_control_reset, message_control_reset[0], true);
+    while(1) {}
+}
+
 
 // Callback when an MQTT message arrives for one of our subscriptions
 void mqttData(void* response) {
@@ -70,15 +168,67 @@ void mqttData(void* response) {
   Serial.print("data=");
   String data = res->popString();
   Serial.println(data);
+
+  // Reset the camera if RESET received
+  if(strcmp(topic.c_str(), topic_control_reset)==0){
+      if (strcmp(data.c_str(), message_control_reset[1]) == 0) {
+      resetDevice();
+    }
+  }
+
+   // Set strip program
+  if(strcmp(topic.c_str(), topic_control_program)==0){
+      if (strcmp(data.c_str(), message_control_program[0]) == 0) {
+          program = 0;
+          change = true;
+          mqtt.publish(topic_status, message_status[2], true);
+      } if (strcmp(data.c_str(), message_control_program[1]) == 0) {
+          program = 1;
+          change = true;
+          mqtt.publish(topic_status, message_status[2], true);
+      } if (strcmp(data.c_str(), message_control_program[2]) == 0) {
+          program = 2;
+          change = true;
+          mqtt.publish(topic_status, message_status[2], true);
+      } else {
+          mqtt.publish(topic_status, message_status[1], true);
+      }
+  }
+
+   // Set accent
+  if(strcmp(topic.c_str(), topic_control_accent)==0){
+      if (atoi(data.c_str()) >= 0 && atoi(data.c_str()) <= 2) {
+          accent = atoi(data.c_str());
+          change = true;
+          mqtt.publish(topic_status, message_status[2], true);
+      } else {
+          mqtt.publish(topic_status, message_status[1], true);
+      }
+  }
+
+   // Set bright
+  if(strcmp(topic.c_str(), topic_control_bright)==0){
+      if (atoi(data.c_str()) >= 0 && atoi(data.c_str()) <= 255) {
+          bright = atoi(data.c_str());
+          change = true;
+          mqtt.publish(topic_status, message_status[2], true);
+      } else {
+          mqtt.publish(topic_status, message_status[1], true);
+      }
+  }
 }
 
 void mqttPublished(void* response) {
   Serial.println("MQTT published");
 }
 
+
+/*
+  Set-up
+*/
 void setup() {
   Serial.begin(115200);
-  Serial.println("EL-Client starting!");
+  Serial.println("shelfstrip EL-Client starting!");
 
   // Sync-up with esp-link, this is required at the start of any sketch and initializes the
   // callbacks to the wifi status change callback. The callback gets called with the initial
@@ -111,18 +261,55 @@ void loop() {
   esp.Process();
 
   if (connected && (millis()-last) > 4000) {
-    Serial.println("publishing");
-    char buf[12];
-
-    itoa(count++, buf, 10);
-    mqtt.publish("/esp-link/1", buf);
-
-    itoa(count+99, buf, 10);
-    mqtt.publish("/hello/world/arduino", buf);
-
-    uint32_t t = cmd.GetTime();
-    Serial.print("Time: "); Serial.println(t);
-
+      if(change == true){
+          Serial.println("change");
+          if (program == 0) {
+              analogWrite(S1_WHITEPIN, 0);
+              analogWrite(S1_BLUEPIN, 0);
+              analogWrite(S1_REDPIN, 0);
+              analogWrite(S1_GREENPIN, 0);
+              analogWrite(S2_WHITEPIN, 0);
+              analogWrite(S2_BLUEPIN, 0);
+              analogWrite(S2_REDPIN, 0);
+              analogWrite(S2_GREENPIN, 0);
+              analogWrite(S3_WHITEPIN, 0);
+              analogWrite(S3_BLUEPIN, 0);
+              analogWrite(S3_REDPIN, 0);
+              analogWrite(S3_GREENPIN, 0);
+          }
+          if (program == 1) {
+              analogWrite(S1_WHITEPIN, bright);
+              analogWrite(S1_BLUEPIN, 0);
+              analogWrite(S1_REDPIN, 0);
+              analogWrite(S1_GREENPIN, 0);
+              analogWrite(S2_WHITEPIN, bright);
+              analogWrite(S2_BLUEPIN, 0);
+              analogWrite(S2_REDPIN, 0);
+              analogWrite(S2_GREENPIN, 0);
+              analogWrite(S3_WHITEPIN, bright);
+              analogWrite(S3_BLUEPIN, 0);
+              analogWrite(S3_REDPIN, 0);
+              analogWrite(S3_GREENPIN, 0);
+          }
+          if (program == 2) {
+              if(accent ==0){
+              analogWrite(S1_WHITEPIN, bright);
+              analogWrite(S1_BLUEPIN, 0);
+              analogWrite(S1_REDPIN, 0);
+              analogWrite(S1_GREENPIN, 0);
+              analogWrite(S2_WHITEPIN, bright);
+              analogWrite(S2_BLUEPIN, 0);
+              analogWrite(S2_REDPIN, 0);
+              analogWrite(S2_GREENPIN, 0);
+              analogWrite(S3_WHITEPIN, bright);
+              analogWrite(S3_BLUEPIN, 0);
+              analogWrite(S3_REDPIN, 0);
+              analogWrite(S3_GREENPIN, 0);
+              }
+          }
+          mqtt.publish(topic_status, message_status[0], true);
+          change = false;
+      }
     last = millis();
   }
 }
