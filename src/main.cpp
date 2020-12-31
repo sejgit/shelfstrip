@@ -38,7 +38,7 @@
 #define S3_REDPIN 12
 #define S3_GREENPIN 13
 
-#define FADESPEED 5     // make this higher to slow down
+#define FADESPEED 4000     // make this higher to slow down
 
 void pinsetup() {
   pinMode(S1_REDPIN, OUTPUT);
@@ -258,58 +258,77 @@ static int count;
 static uint32_t last;
 
 void loop() {
-  esp.Process();
+    int r, g, b, w;
+    esp.Process();
 
-  if (connected && (millis()-last) > 4000) {
-      if(change == true){
-          Serial.println("change");
-          if (program == 0) {
-              analogWrite(S1_WHITEPIN, 0);
-              analogWrite(S1_BLUEPIN, 0);
-              analogWrite(S1_REDPIN, 0);
-              analogWrite(S1_GREENPIN, 0);
-              analogWrite(S2_WHITEPIN, 0);
-              analogWrite(S2_BLUEPIN, 0);
-              analogWrite(S2_REDPIN, 0);
-              analogWrite(S2_GREENPIN, 0);
-              analogWrite(S3_WHITEPIN, 0);
-              analogWrite(S3_BLUEPIN, 0);
-              analogWrite(S3_REDPIN, 0);
-              analogWrite(S3_GREENPIN, 0);
-          }
-          if (program == 1) {
-              analogWrite(S1_WHITEPIN, bright);
-              analogWrite(S1_BLUEPIN, 0);
-              analogWrite(S1_REDPIN, 0);
-              analogWrite(S1_GREENPIN, 0);
-              analogWrite(S2_WHITEPIN, bright);
-              analogWrite(S2_BLUEPIN, 0);
-              analogWrite(S2_REDPIN, 0);
-              analogWrite(S2_GREENPIN, 0);
-              analogWrite(S3_WHITEPIN, bright);
-              analogWrite(S3_BLUEPIN, 0);
-              analogWrite(S3_REDPIN, 0);
-              analogWrite(S3_GREENPIN, 0);
+    if (connected && (millis()-last) > FADESPEED) {
+        if(change == true){
+            Serial.println("change");
+            if (program == 0) {
+                analogWrite(S1_WHITEPIN, 0);
+                analogWrite(S1_BLUEPIN, 0);
+                analogWrite(S1_REDPIN, 0);
+                analogWrite(S1_GREENPIN, 0);
+                analogWrite(S2_WHITEPIN, 0);
+                analogWrite(S2_BLUEPIN, 0);
+                analogWrite(S2_REDPIN, 0);
+                analogWrite(S2_GREENPIN, 0);
+                analogWrite(S3_WHITEPIN, 0);
+                analogWrite(S3_BLUEPIN, 0);
+                analogWrite(S3_REDPIN, 0);
+                analogWrite(S3_GREENPIN, 0);
+            }
+            if (program == 1) {
+                analogWrite(S1_WHITEPIN, bright);
+                analogWrite(S1_BLUEPIN, 0);
+                analogWrite(S1_REDPIN, 0);
+                analogWrite(S1_GREENPIN, 0);
+                analogWrite(S2_WHITEPIN, bright);
+                analogWrite(S2_BLUEPIN, 0);
+                analogWrite(S2_REDPIN, 0);
+                analogWrite(S2_GREENPIN, 0);
+                analogWrite(S3_WHITEPIN, bright);
+                analogWrite(S3_BLUEPIN, 0);
+                analogWrite(S3_REDPIN, 0);
+                analogWrite(S3_GREENPIN, 0);
           }
           if (program == 2) {
               if(accent ==0){
-              analogWrite(S1_WHITEPIN, bright);
-              analogWrite(S1_BLUEPIN, 0);
-              analogWrite(S1_REDPIN, 0);
-              analogWrite(S1_GREENPIN, 0);
-              analogWrite(S2_WHITEPIN, bright);
-              analogWrite(S2_BLUEPIN, 0);
-              analogWrite(S2_REDPIN, 0);
-              analogWrite(S2_GREENPIN, 0);
-              analogWrite(S3_WHITEPIN, bright);
-              analogWrite(S3_BLUEPIN, 0);
-              analogWrite(S3_REDPIN, 0);
-              analogWrite(S3_GREENPIN, 0);
+                  analogWrite(S1_WHITEPIN, 0);
+                  analogWrite(S1_BLUEPIN, 0);
+                  analogWrite(S1_REDPIN, 0);
+                  analogWrite(S1_GREENPIN, bright);
+                  analogWrite(S2_WHITEPIN, 0);
+                  analogWrite(S2_BLUEPIN, 0);
+                  analogWrite(S2_REDPIN, bright);
+                  analogWrite(S2_GREENPIN, 0);
+                  analogWrite(S3_WHITEPIN, 0);
+                  analogWrite(S3_BLUEPIN, 0);
+                  analogWrite(S3_REDPIN, 0);
+                  analogWrite(S3_GREENPIN, bright);
+              }
+              if(accent ==1){
+                  r = 0;
+                  g = 0;
+                  b = 30;
+                  w = 0;
+                  analogWrite(S1_WHITEPIN, w);
+                  analogWrite(S1_BLUEPIN, b);
+                  analogWrite(S1_REDPIN, r);
+                  analogWrite(S1_GREENPIN, g);
+                  analogWrite(S2_WHITEPIN, w);
+                  analogWrite(S2_BLUEPIN, b);
+                  analogWrite(S2_REDPIN, r);
+                  analogWrite(S2_GREENPIN, g);
+                  analogWrite(S3_WHITEPIN, w);
+                  analogWrite(S3_BLUEPIN, b);
+                  analogWrite(S3_REDPIN, r);
+                  analogWrite(S3_GREENPIN, g);
               }
           }
           mqtt.publish(topic_status, message_status[0], true);
           change = false;
-      }
-    last = millis();
-  }
+        }
+        last = millis();
+    }
 }
