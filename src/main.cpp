@@ -18,6 +18,7 @@
 #include <ELClientCmd.h>
 #include <ELClientMqtt.h>
 #include <avr/wdt.h>
+#include <ArduinoJson.h>
 
 
 /*
@@ -63,29 +64,23 @@ void pinsetup() {
 */
 #define toptopic "sej" // main topic
 #define clientId "shelfstrip" // client ID for this unit
-#define concat(first, second, third) first second third //macro for concatenation
-#define topic_clientId concat(toptopic, "/", clientId)
+#define concat(first, second, third, fourth) first second third fourth //macro for concatenation
 
-const char* topic_control_reset= concat(topic_clientId , "/control", "/reset"); // reset position
-const char* message_control_reset[] = {"--", "RESET", "Resetting"};
-
-const char* topic_control_program= concat(topic_clientId, "/control", "/program"); // run program
-const char* message_control_program[] = {"OFF", "WHITE", "ACCENT"};
-
-const char* topic_control_accent= concat(topic_clientId, "/control", "/accent"); // accent #
-const char* topic_control_bright= concat(topic_clientId, "/control", "/bright"); // bright
-
-const char* topic_status= concat(topic_clientId, "/status", "/status"); // program status
-const char* message_status[] = {"OK", "NOK", "CHANGING"};
+const char* topic_control = concat(toptopic, "/", clientId, "/control"); // reset position
+const char* topic_status= concat(toptopic, "/", clientId, "/status"); // program status
 
 
 /*
   Global vars
 */
+boolean state = false; // start with off
+int brightness = 255; // start with full 100% bright
+int red = 0; // red led
+int green = 0; // green led
+int blue = 0; // blue led
+int white = 0; // white led
 int program = 0; // start with off
-int accent = 0; // start with no accent
-int bright = 255; // start with full 100% bright
-char buf[25]; // spare char buffer
+char buf[100]; // spare char buffer
 boolean change = false;
 
 
@@ -124,16 +119,8 @@ bool connected;
 // Callback when MQTT is connected
 void mqttConnected(void* response) {
   Serial.println("MQTT connected!");
-  mqtt.publish(toptopic, concat("connected ", clientId, ".") , true );
-  mqtt.publish(topic_status, message_status[0] , true );
-  mqtt.subscribe(topic_control_reset);
-  mqtt.publish(topic_control_reset, message_control_reset[0] , true );
-  mqtt.subscribe(topic_control_program);
-  mqtt.publish(topic_control_program, message_control_program[program] , true );
-  mqtt.subscribe(topic_control_accent);
-  mqtt.publish(topic_control_accent, itoa(accent, buf, 10) , true );
-  mqtt.subscribe(topic_control_bright);
-  mqtt.publish(topic_control_bright, itoa(bright, buf, 10) , true );
+  mqtt.publish(toptopic, concat("connected ", toptopic, clientId, ".") , true );
+  mqtt.subscribe(topic_control);
   connected = true;
 }
 
@@ -141,19 +128,6 @@ void mqttConnected(void* response) {
 void mqttDisconnected(void* response) {
   Serial.println("MQTT disconnected");
   connected = false;
-}
-
-/*
-  Handle reset through MQTT or wifi fail
- */
-void resetDevice(void)
-{
-    Serial.println("Rebooting...");
-    mqtt.publish(topic_control_reset, message_control_reset[2], true);
-    wdt_enable( WDTO_4S);
-    delay(2000);
-    mqtt.publish(topic_control_reset, message_control_reset[0], true);
-    while(1) {}
 }
 
 
@@ -165,58 +139,39 @@ void mqttData(void* response) {
   String topic = res->popString();
   Serial.println(topic);
 
+  char data[50];
   Serial.print("data=");
-  String data = res->popString();
+  res->popChar(data);
   Serial.println(data);
 
-  // Reset the camera if RESET received
-  if(strcmp(topic.c_str(), topic_control_reset)==0){
-      if (strcmp(data.c_str(), message_control_reset[1]) == 0) {
-      resetDevice();
-    }
-  }
-
-   // Set strip program
-  if(strcmp(topic.c_str(), topic_control_program)==0){
-      if (strcmp(data.c_str(), message_control_program[0]) == 0) {
-          program = 0;
-          change = true;
-          mqtt.publish(topic_status, message_status[2], true);
-      } if (strcmp(data.c_str(), message_control_program[1]) == 0) {
-          program = 1;
-          change = true;
-          mqtt.publish(topic_status, message_status[2], true);
-      } if (strcmp(data.c_str(), message_control_program[2]) == 0) {
-          program = 2;
-          change = true;
-          mqtt.publish(topic_status, message_status[2], true);
+   // topic control
+  if(strcmp(topic.c_str(), topic_control)==0){
+      DynamicJsonDocument doc(200);
+      DeserializationError error = deserializeJson(doc, data);
+      if(error) {
+          Serial.print(("deserializeJson() failed: "));
+          Serial.println(error.f_str());
       } else {
-          mqtt.publish(topic_status, message_status[1], true);
-      }
-  }
-
-   // Set accent
-  if(strcmp(topic.c_str(), topic_control_accent)==0){
-      if (atoi(data.c_str()) >= 0 && atoi(data.c_str()) <= 2) {
-          accent = atoi(data.c_str());
+          state = (doc["state"] == "ON");
+          brightness = doc["brightness"];
+          red = doc["state"]["r"];
+          green = doc["state"]["g"];
+          blue = doc["state"]["b"];
+          white = doc["state"]["w"];
+          program = doc["program"];
           change = true;
-          mqtt.publish(topic_status, message_status[2], true);
-      } else {
-          mqtt.publish(topic_status, message_status[1], true);
-      }
-  }
-
-   // Set bright
-  if(strcmp(topic.c_str(), topic_control_bright)==0){
-      if (atoi(data.c_str()) >= 0 && atoi(data.c_str()) <= 255) {
-          bright = atoi(data.c_str());
-          change = true;
-          mqtt.publish(topic_status, message_status[2], true);
-      } else {
-          mqtt.publish(topic_status, message_status[1], true);
+          Serial.println(state);
+          Serial.println(brightness);
+          Serial.println("LED Color");
+          Serial.println(red);
+          Serial.println(green);
+          Serial.println(blue);
+          Serial.println(white);
+          Serial.println(program);
       }
   }
 }
+
 
 void mqttPublished(void* response) {
   Serial.println("MQTT published");
@@ -254,7 +209,7 @@ void setup() {
   Serial.println("EL-MQTT ready");
 }
 
-static int count;
+int count;
 static uint32_t last;
 
 void loop() {
@@ -277,57 +232,55 @@ void loop() {
                 analogWrite(S3_BLUEPIN, 0);
                 analogWrite(S3_REDPIN, 0);
                 analogWrite(S3_GREENPIN, 0);
-            }
-            if (program == 1) {
-                analogWrite(S1_WHITEPIN, bright);
+            } else if (program == 1) {
+                analogWrite(S1_WHITEPIN, brightness);
                 analogWrite(S1_BLUEPIN, 0);
                 analogWrite(S1_REDPIN, 0);
                 analogWrite(S1_GREENPIN, 0);
-                analogWrite(S2_WHITEPIN, bright);
+                analogWrite(S2_WHITEPIN, brightness);
                 analogWrite(S2_BLUEPIN, 0);
                 analogWrite(S2_REDPIN, 0);
                 analogWrite(S2_GREENPIN, 0);
-                analogWrite(S3_WHITEPIN, bright);
+                analogWrite(S3_WHITEPIN, brightness);
                 analogWrite(S3_BLUEPIN, 0);
                 analogWrite(S3_REDPIN, 0);
                 analogWrite(S3_GREENPIN, 0);
-          }
-          if (program == 2) {
-              if(accent ==0){
-                  analogWrite(S1_WHITEPIN, 0);
-                  analogWrite(S1_BLUEPIN, 0);
-                  analogWrite(S1_REDPIN, 0);
-                  analogWrite(S1_GREENPIN, bright);
-                  analogWrite(S2_WHITEPIN, 0);
-                  analogWrite(S2_BLUEPIN, 0);
-                  analogWrite(S2_REDPIN, bright);
-                  analogWrite(S2_GREENPIN, 0);
-                  analogWrite(S3_WHITEPIN, 0);
-                  analogWrite(S3_BLUEPIN, 0);
-                  analogWrite(S3_REDPIN, 0);
-                  analogWrite(S3_GREENPIN, bright);
-              }
-              if(accent ==1){
-                  r = 0;
-                  g = 0;
-                  b = 30;
-                  w = 0;
-                  analogWrite(S1_WHITEPIN, w);
-                  analogWrite(S1_BLUEPIN, b);
-                  analogWrite(S1_REDPIN, r);
-                  analogWrite(S1_GREENPIN, g);
-                  analogWrite(S2_WHITEPIN, w);
-                  analogWrite(S2_BLUEPIN, b);
-                  analogWrite(S2_REDPIN, r);
-                  analogWrite(S2_GREENPIN, g);
-                  analogWrite(S3_WHITEPIN, w);
-                  analogWrite(S3_BLUEPIN, b);
-                  analogWrite(S3_REDPIN, r);
-                  analogWrite(S3_GREENPIN, g);
-              }
-          }
-          mqtt.publish(topic_status, message_status[0], true);
-          change = false;
+            } else if (program == 2) {
+                analogWrite(S1_WHITEPIN, 0);
+                analogWrite(S1_BLUEPIN, 0);
+                analogWrite(S1_REDPIN, 0);
+                analogWrite(S1_GREENPIN, brightness);
+                analogWrite(S2_WHITEPIN, 0);
+                analogWrite(S2_BLUEPIN, 0);
+                analogWrite(S2_REDPIN, brightness);
+                analogWrite(S2_GREENPIN, 0);
+                analogWrite(S3_WHITEPIN, 0);
+                analogWrite(S3_BLUEPIN, 0);
+                analogWrite(S3_REDPIN, 0);
+                analogWrite(S3_GREENPIN, brightness);
+            } else if(program == 3){
+                r = 0;
+                g = 0;
+                b = 30;
+                w = 0;
+                count = count + 1;
+                analogWrite(S1_WHITEPIN, w);
+                analogWrite(S1_BLUEPIN, b);
+                analogWrite(S1_REDPIN, r);
+                analogWrite(S1_GREENPIN, g);
+                analogWrite(S2_WHITEPIN, w);
+                analogWrite(S2_BLUEPIN, b);
+                analogWrite(S2_REDPIN, r);
+                analogWrite(S2_GREENPIN, g);
+                analogWrite(S3_WHITEPIN, w);
+                analogWrite(S3_BLUEPIN, b);
+                analogWrite(S3_REDPIN, r);
+                analogWrite(S3_GREENPIN, g);
+            }
+
+            // TODO build "test" into buid JSON
+            mqtt.publish(topic_status, "test" , true);
+            change = false;
         }
         last = millis();
     }
