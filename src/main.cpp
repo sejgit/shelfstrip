@@ -92,8 +92,11 @@ boolean s2 = true; // start with strip 2 enabled
 boolean s3 = true; // start with strip 3 enabled
 
 char buf[200]; // spare char buffer
-boolean change = false;
+boolean change = true;
 boolean inprocess = false;
+int count = 0;
+unsigned long last = 0;
+
 
 /*
   Initialize ELClient & MQTT
@@ -161,7 +164,7 @@ void mqttData(void *response) {
       Serial.print(("deserializeJson() failed: "));
       Serial.println(error.f_str());
     } else {
-      state_recd = (doc["state"] == "100");
+      state_recd = (doc["state"] == 100);
       brightness_recd = doc["brightness"];
       red_recd = doc["color"]["r"];
       green_recd = doc["color"]["g"];
@@ -169,6 +172,7 @@ void mqttData(void *response) {
       white_recd = doc["color"]["w"];
       program_recd = doc["program"];
       change = true;
+      Serial.println("recd: ");
       Serial.println(state_recd);
       Serial.println(brightness_recd);
       Serial.println("LED Color");
@@ -181,7 +185,12 @@ void mqttData(void *response) {
   }
 }
 
-void mqttPublished(void *response) { Serial.println("MQTT published"); }
+/*
+  mqtt publish message
+*/
+void mqttPublished(void *response) {
+    Serial.println("MQTT published");
+}
 
 /*
   build and publish the json state
@@ -201,6 +210,7 @@ void jsonBuildPublish() {
   doc["program"] = program_state;
 
   serializeJson(doc, buf);
+  Serial.println("pub: ");
   Serial.println(buf);
 
   mqtt.publish(topic_status, buf);
@@ -246,7 +256,7 @@ void stripUpdate() {
   Set-up
 */
 void setup() {
-  Serial.begin(115200);
+  Serial.begin(19200);
   Serial.println("shelfstrip EL-Client starting!");
 
   // Sync-up with esp-link, this is required at the start of any sketch and
@@ -275,9 +285,6 @@ void setup() {
   Serial.println("EL-MQTT ready");
 }
 
-int count;
-static uint32_t last;
-
 void loop() {
   esp.Process();
 
@@ -287,12 +294,14 @@ void loop() {
           Serial.println("change");
 
           if (state_recd) {
+              state_state = state_recd;
+              Serial.println("state=true");
               if (program_recd == 0) { //white normal strip
                   program_state = program_recd;
                   red_state = 0;
                   green_state = 0;
                   blue_state = 0;
-                  white_state = 255;
+                  white_state = white_recd;
                   brightness_state = brightness_recd;
                   s1 = true;
                   s2 = true;
@@ -328,6 +337,7 @@ void loop() {
                   stripUpdate();
               }
           } else if (!state_recd) { // turn strip off
+              Serial.println("state=false");
               inprocess = true;
               state_state = state_recd;
               brightness_state = 0;
@@ -342,9 +352,9 @@ void loop() {
               stripUpdate();
           }
           inprocess = false;
-    }
-    jsonBuildPublish();
-    change = false;
+          jsonBuildPublish();
+          change = false;
+          last = millis();
+      }
   }
-  last = millis();
 }
