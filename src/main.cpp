@@ -164,23 +164,35 @@ void mqttData(void *response) {
       Serial.print(("deserializeJson() failed: "));
       Serial.println(error.f_str());
     } else {
-      state_recd = (doc["state"] == 100);
-      brightness_recd = doc["brightness"];
-      red_recd = doc["color"]["r"];
-      green_recd = doc["color"]["g"];
-      blue_recd = doc["color"]["b"];
-      white_recd = doc["color"]["w"];
-      program_recd = doc["program"];
-      change = true;
       Serial.println("recd: ");
+      state_recd = (doc["state"] == "ON");
+      Serial.print("State: ");
       Serial.println(state_recd);
-      Serial.println(brightness_recd);
-      Serial.println("LED Color");
-      Serial.println(red_recd);
-      Serial.println(green_recd);
-      Serial.println(blue_recd);
-      Serial.println(white_recd);
-      Serial.println(program_recd);
+      JsonVariant error = doc["br"];
+      if (!error.isNull()) {
+          brightness_recd = error;
+          Serial.print("Brightness: ");
+          Serial.println(brightness_recd);
+      }
+      error = doc["c"];
+      if (!error.isNull()) {
+          red_recd = doc["c"]["r"];
+          green_recd = doc["c"]["g"];
+          blue_recd = doc["c"]["b"];
+          white_recd = doc["c"]["w"];
+          Serial.println("LED Color");
+          Serial.println(red_recd);
+          Serial.println(green_recd);
+          Serial.println(blue_recd);
+          Serial.println(white_recd);
+      }
+      error = doc["pgm"];
+      if (!error.isNull()) {
+          program_recd = error;
+          Serial.print("Program: ");
+          Serial.println(program_recd);
+      }
+      change = true;
     }
   }
 }
@@ -198,16 +210,16 @@ void mqttPublished(void *response) {
 void jsonBuildPublish() {
   DynamicJsonDocument doc(200);
   if (state_state) {
-    doc["state"] = 100;
+    doc["state"] = "ON";
   } else {
-    doc["state"] = 0;
+    doc["state"] = "OFF";
   }
-  doc["brightness"] = brightness_state;
-  doc["color"]["r"] = red_state;
-  doc["color"]["g"] = green_state;
-  doc["color"]["b"] = blue_state;
-  doc["color"]["w"] = white_state;
-  doc["program"] = program_state;
+  doc["br"] = brightness_state;
+  doc["c"]["r"] = red_state;
+  doc["c"]["g"] = green_state;
+  doc["c"]["b"] = blue_state;
+  doc["c"]["w"] = white_state;
+  doc["pgm"] = program_state;
 
   serializeJson(doc, buf);
   Serial.println("pub: ");
@@ -256,7 +268,7 @@ void stripUpdate() {
   Set-up
 */
 void setup() {
-  Serial.begin(19200);
+  Serial.begin(115200);
   Serial.println("shelfstrip EL-Client starting!");
 
   // Sync-up with esp-link, this is required at the start of any sketch and
@@ -301,7 +313,11 @@ void loop() {
                   red_state = 0;
                   green_state = 0;
                   blue_state = 0;
-                  white_state = white_recd;
+                  if(white_recd == 0) {
+                      white_state = 255;
+                  } else {
+                      white_state = white_recd;
+                  }
                   brightness_state = brightness_recd;
                   s1 = true;
                   s2 = true;
@@ -340,12 +356,12 @@ void loop() {
               Serial.println("state=false");
               inprocess = true;
               state_state = state_recd;
-              brightness_state = 0;
-              red_state = 0;
-              green_state = 0;
-              blue_state = 0;
-              white_state = 0;
-              program_state = 0;
+              // brightness_state = 0;
+              // red_state = 0;
+              // green_state = 0;
+              // blue_state = 0;
+              // white_state = 0;
+              // program_state = 0;
               s1 = true;
               s2 = true;
               s3 = true;
