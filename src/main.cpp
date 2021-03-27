@@ -160,39 +160,34 @@ void mqttData(void *response) {
   if (strcmp(topic.c_str(), topic_control) == 0) {
     DynamicJsonDocument doc(200);
     DeserializationError error = deserializeJson(doc, buf);
-    if (error) {
-      Serial.print(("deserializeJson() failed: "));
-      Serial.println(error.f_str());
-    } else {
-      Serial.println("recd: ");
-      if (doc["state"] == "ON" || doc["state"] == "OFF") {
+    if (!error) {
+      JsonVariant error = doc["state"];
+      if (!error.isNull()) {
           state_recd = (doc["state"] == "ON");
       }
-      Serial.print("State: ");
-      Serial.println(state_recd);
-      JsonVariant error = doc["br"];
+      error = doc["br"];
       if (!error.isNull()) {
           brightness_recd = error;
-          Serial.print("Brightness: ");
-          Serial.println(brightness_recd);
       }
-      error = doc["c"];
+      error = doc["c"]["r"];
       if (!error.isNull()) {
           red_recd = doc["c"]["r"];
+      }
+      error = doc["c"]["g"];
+      if (!error.isNull()) {
           green_recd = doc["c"]["g"];
+      }
+      error = doc["c"]["b"];
+      if (!error.isNull()) {
           blue_recd = doc["c"]["b"];
+      }
+      error = doc["c"]["w"];
+      if (!error.isNull()) {
           white_recd = doc["c"]["w"];
-          Serial.println("LED Color");
-          Serial.println(red_recd);
-          Serial.println(green_recd);
-          Serial.println(blue_recd);
-          Serial.println(white_recd);
       }
       error = doc["pgm"];
       if (!error.isNull()) {
           program_recd = error;
-          Serial.print("Program: ");
-          Serial.println(program_recd);
       }
       change = true;
     }
@@ -306,64 +301,92 @@ void loop() {
       if (change == true) {
           inprocess = true;
           Serial.println("change");
-
-          if (state_recd) {
-              state_state = state_recd;
-              Serial.println("state=true");
-              if (program_recd == 0) { //white normal strip
-                  program_state = program_recd;
-                  red_state = 0;
-                  green_state = 0;
-                  blue_state = 0;
-                  if(white_recd == 0) {
-                      white_state = 255;
-                  } else {
-                      white_state = white_recd;
-                  }
-                  brightness_state = brightness_recd;
-                  s1 = true;
-                  s2 = true;
-                  s3 = true;
-                  stripUpdate();
-              } else if (program_recd == 1) { //red green blue color normal strip
-                  program_state = program_recd;
-                  red_state = red_recd;
-                  green_state = green_recd;
-                  blue_state = blue_recd;
-                  white_state = 0;
-                  brightness_state = brightness_recd;
-                  s1 = true;
-                  s2 = true;
-                  s3 = true;
-                  stripUpdate();
-               } else if (program_recd == 2) { //red green Christmas strip
-                  program_state = program_recd;
-                  blue_state = 0;
-                  white_state = 0;
-                  brightness_state = brightness_recd;
-                  red_state = 0;
-                  green_state = 255;
-                  s1 = true;
-                  s2 = false;
-                  s3 = true;
-                  stripUpdate();
-                  red_state = 255;
-                  green_state = 0;
-                  s1 = false;
-                  s2 = true;
-                  s3 = false;
-                  stripUpdate();
+          state_state = state_recd;
+          if (brightness_recd >= 0 && brightness_recd <= 255) {
+              brightness_state = brightness_recd;
+          }
+          if (program_recd == 0) { //white normal strip
+              program_state = program_recd;
+              red_state = 0;
+              green_state = 0;
+              blue_state = 0;
+              if(white_recd == 0) {
+                  white_state = 255;
+              } else {
+                  white_state = white_recd;
               }
-          } else if (!state_recd) { // turn strip off
+              s1 = true;
+              s2 = true;
+              s3 = true;
+              stripUpdate();
+          } else if (program_recd == 1) { //red green blue color normal strip
+              program_state = program_recd;
+              red_state = red_recd;
+              green_state = green_recd;
+              blue_state = blue_recd;
+              white_state = 0;
+              s1 = true;
+              s2 = true;
+              s3 = true;
+              stripUpdate();
+          } else if (program_recd == 2) { //red green Christmas strip
+              program_state = program_recd;
+              blue_state = 0;
+              white_state = 0;
+              red_state = 0;
+              green_state = 255;
+              s1 = true;
+              s2 = false;
+              s3 = true;
+              stripUpdate();
+              red_state = 255;
+              green_state = 0;
+              s1 = false;
+              s2 = true;
+              s3 = false;
+              stripUpdate();
+          } else if (program_recd == 3) { //red white  Canada strip
+              program_state = program_recd;
+              blue_state = 0;
+              white_state = 0;
+              red_state = 255;
+              green_state = 0;
+              s1 = true;
+              s2 = false;
+              s3 = true;
+              stripUpdate();
+              red_state = 0;
+              white_state = 255;
+              s1 = false;
+              s2 = true;
+              s3 = false;
+              stripUpdate();
+          } else if (program_recd == 4) { //red white blue USA strip
+              program_state = program_recd;
+              blue_state = 0;
+              white_state = 0;
+              red_state = 255;
+              green_state = 0;
+              s1 = true;
+              s2 = false;
+              s3 = false;
+              stripUpdate();
+              red_state = 0;
+              white_state = 255;
+              s1 = false;
+              s2 = true;
+              s3 = false;
+              stripUpdate();
+              blue_state = 255;
+              white_state = 0;
+              s1 = false;
+              s2 = false;
+              s3 = true;
+              stripUpdate();
+          }
+          if (!state_state) { // turn strip off
               Serial.println("state=false");
               inprocess = true;
-              state_state = state_recd;
-              // brightness_state = 0;
-              // red_state = 0;
-              // green_state = 0;
-              // blue_state = 0;
-              // white_state = 0;
-              // program_state = 0;
               s1 = true;
               s2 = true;
               s3 = true;
