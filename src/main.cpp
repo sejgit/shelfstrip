@@ -165,7 +165,9 @@ void mqttData(void *response) {
       Serial.println(error.f_str());
     } else {
       Serial.println("recd: ");
-      state_recd = (doc["state"] == "ON");
+      if (doc["state"] == "ON" || doc["state"] == "OFF") {
+          state_recd = (doc["state"] == "ON");
+      }
       Serial.print("State: ");
       Serial.println(state_recd);
       JsonVariant error = doc["br"];
@@ -225,7 +227,7 @@ void jsonBuildPublish() {
   Serial.println("pub: ");
   Serial.println(buf);
 
-  mqtt.publish(topic_status, buf);
+  mqtt.publish(topic_status, buf, true);
 }
 
 /*
