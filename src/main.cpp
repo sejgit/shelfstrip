@@ -298,6 +298,21 @@ void loop() {
   esp.Process();
 
   if (connected && (millis() - last) > FADESPEED) {
+      if (brightness_recd == -1) {
+          brightness_state = brightness_state - 5;
+          change = true;
+          if (brightness_state < 0) {
+              brightness_recd = 256;
+              brightness_state = 0;
+          }
+      } else if (brightness_recd == 256) {
+          brightness_state = brightness_state + 5;
+          change = true;
+          if (brightness_state > 255) {
+              brightness_recd = -1;
+              brightness_state = 255;
+          }
+      }
       if (change == true) {
           inprocess = true;
           Serial.println("change");
@@ -382,6 +397,24 @@ void loop() {
               s1 = false;
               s2 = false;
               s3 = true;
+              stripUpdate();
+          } else if (program_recd == 5) { //purple yellow Easter  strip
+              program_state = program_recd;
+              red_state = 255;
+              green_state = 255;
+              blue_state = 0;
+              white_state = 0;
+              s1 = true;
+              s2 = false;
+              s3 = true;
+              stripUpdate();
+              red_state = 128;
+              green_state = 0;
+              blue_state = 128;
+              white_state = 0;
+              s1 = false;
+              s2 = true;
+              s3 = false;
               stripUpdate();
           }
           if (!state_state) { // turn strip off
